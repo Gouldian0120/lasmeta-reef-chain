@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity ^0.8.4;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+
+contract TestNFT721 is ERC721Enumerable, Ownable, ReentrancyGuard {
+    using Strings for uint256;
+
+    bool public enableMint;
+    string private constant _baseExtension = ".json";
+
+    string private _baseTokenURI;
+
+    // Root of merkle tree.
+    bytes32 private merkleRoot;
+
+    uint256 public immutable MAX_SUPPLY = 250;
+
+    uint256 public immutable MAX_WHITELISTS = 125;
+
+    uint256 public immutable MAX_SALE = 5;
+
+    // whitelist mint price is 20000 REEF coin
+    // uint256 public wlPrice = 20000 ether;
+    uint256 public wlPrice = 20 ether;
+
+    // public mint price is 30000 REEF coin
+    // uint256 public pubsalePrice = 30000 ether;
+    uint256 public pubsalePrice = 30 ether;
+
+    mapping(address => uint256) private minted;
+
+    struct TokenMintInfo {
+        address creater;
+        uint64 mintedTimestamp;
+    }
+
+    mapping(uint256 => TokenMintInfo) private tokenMintInfo;
+
+    modifier isMintable() {
+        require(enableMint);
+        require(totalSupply() < MAX_SUPPLY);
+        _;
+    }
+
+    modifier callerIsUser() {
+        require(tx.origin == msg.sender, "The caller is another contract");
+        _;
+    }
+
+    event Minted(address indexed minter, uint256 tokenId, uint256 price);
+
+    constructor() ERC721("CRLasMeta", "CoralwaveReefLasMeta") {
+
+    }
+
+    function setEnableMint(bool _enableMint) external onlyOwner {
+        enableMint = _enableMint;
+    }
+
+    function _baseURI() internal view virtual override returns (string memory) {
+        return _baseTokenURI;
+    }
+
+    function setBaseURI(string memory newBaseURI) external onlyOwner {
+        _baseTokenURI = newBaseURI;
+    }
+
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        require(_exists(tokenId),"ERC721Metadata: URI query for nonexistent token");
+
+        string memory base = _baseURI();
+
+        if (bytes(base).length > 0) {
+            return string(abi.encodePacked(base, tokenId.toString(), _baseExtension));
+        } else {
+            return "";
+        }
+    }
+
+    function setMerkleRoot(bytes32 newRoot) external onlyOwner {
+        merkleRoot = newRoot;
+    }
+
+    function setWLPrice(uint256 price) external onlyOwner {
+        wlPrice = price;
+    }
+
+    function setPubsalePrice(uint256 price) external onlyOwner {
+        pubsalePrice = price;
+    }
+
+    function isWhiteListed(address account, bytes32[] calldata proof) public view returns(bool) {
+        bytes32 leaf = keccak256(abi.encodePacked(account));
+        return MerkleProof.verify(proof, merkleRoot, leaf);
+    }
+
+    // function freeMint() external nonReentrant isMintable() isPresale() isWhiteListed() {
+    //     require(totalSupply() < MAX_PRESALE_MINT, "Exceeded the max presale supply");
+
+    //     uint256 tokenId = totalSupply();
+    //     tokenId ++;
+    //     _safeMint(msg.sender, tokenId);
+
+    //     emit PresaleMinted(msg.sender, tokenId);
+    // }
+
+    function mint(bytes32[] calldata proof) external payable nonReentrant callerIsUser isMintable {
+        require(minted[msg.sender] <= MAX_SALE, "Exceeded the max sale amount");
+
+        uint256 price = pubsalePrice;
+
+        uint256 tokenId = totalSupply();
+        tokenId ++;
+
+        if(isWhiteListed(msg.sender, proof)) {
+
+            if(minted[msg.sender] == 0) {
+                _safeMint(msg.sender, tokenId);
+
+            } else if(minted[msg.sender] == 1) {
+                price = wlPrice;
+                require(msg.value >= price, "Insufficient balance");
+                
+                uint256 excess = msg.value - price;
+                if(excess > 0) payable(msg.sender).transfer(excess);
+
+                _safeMint(msg.sender, tokenId);
+            }
+        } else {
+            require(msg.value >= price, "Insufficient balance");
+            
+            uint256 excess = msg.value - price;
+            if(excess > 0) payable(msg.sender).transfer(excess);
+
+            _safeMint(msg.sender, tokenId);
+        }
+
+        minted[msg.sender] ++;
+        tokenMintInfo[tokenId] = TokenMintInfo({creater: msg.sender, mintedTimestamp: uint64(block.timestamp)});
+
+        emit Minted(msg.sender, tokenId, price);
+    }
+
+    function withdrawAll() external onlyOwner nonReentrant {
+        require(address(this).balance > 0);
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Withdraw failed");
+    }
+}
