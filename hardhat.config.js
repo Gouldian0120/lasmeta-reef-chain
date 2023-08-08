@@ -17,10 +17,10 @@ module.exports = {
       scanUrl: "<http://api:8000>",
     },
     reef_testnet: {
-      // url: "wss://rpc-testnet.reefscan.info/ws",
-      // scanUrl: "https://api-testnet.reefscan.info", 
       url: "wss://rpc-testnet.reefscan.info/ws",
-      scanUrl: "https://testnet.reefscan.info",
+      scanUrl: "https://api-testnet.reefscan.info", 
+      // url: "wss://rpc-testnet.reefscan.info/ws",
+      // scanUrl: "https://testnet.reefscan.info",
       seeds: {
         testnet_account: `${process.env.MNEMONIC_SEEDS}`, // SEED GOES HERE
       },
