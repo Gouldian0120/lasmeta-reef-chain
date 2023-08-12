@@ -11,8 +11,8 @@ async function main() {
     const signer = await hre.reef.getSignerByName("testnet_account")
     await signer.claimDefaultAccount()
 
-    const CoralwaveContract = await hre.reef.getContractFactory("TestNFT721", signer)
-    const coralwaveContract = await CoralwaveContract.deploy()
+    const coralwaveContractFactory = await hre.reef.getContractFactory("TestNFT721", signer)
+    const coralwaveContract = await coralwaveContractFactory.deploy()
     await coralwaveContract.deployed()
 
     console.log({
